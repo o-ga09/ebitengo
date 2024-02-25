@@ -18,3 +18,11 @@ go build main.go
 ```
 
 <div align="center"><img src="./img/lovely.png" width="40px" height="40px" ></div>
+
+## 参考
+
+https://zenn.dev/demouth/articles/e11e4802047343
+
+https://zenn.dev/nekoshita/articles/cb5238791c61ef
+
+https://zenn.dev/koya_iwamura/articles/53a4469271022e

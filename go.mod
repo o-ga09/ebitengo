@@ -2,10 +2,7 @@ module github.com/o-ga09/ebiten
 
 go 1.21.0
 
-require (
-	github.com/hajimehoshi/ebiten v1.12.12
-	github.com/hajimehoshi/ebiten/v2 v2.6.2
-)
+require github.com/hajimehoshi/ebiten/v2 v2.6.2
 
 require (
 	github.com/ebitengine/purego v0.5.0 // indirect
