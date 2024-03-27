@@ -1,8 +1,6 @@
 package orange
 
 import (
-	"bytes"
-	"image"
 	"image/color"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -11,20 +9,6 @@ import (
 
 type Draw struct {
 	op ebiten.DrawImageOptions
-}
-
-func LoadImage(b []byte) *ebiten.Image {
-	img, _, err := image.Decode(bytes.NewReader(b))
-	if err != nil {
-		panic(err)
-	}
-
-	origin := ebiten.NewImageFromImage(img)
-	s := origin.Bounds().Size()
-	ebitenImg := ebiten.NewImage(s.X, s.Y)
-	op := &ebiten.DrawImageOptions{}
-	ebitenImg.DrawImage(origin, op)
-	return ebitenImg
 }
 
 func (d *Draw) Oranges(screen *ebiten.Image, world World, oranges []*Orange) {

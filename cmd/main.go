@@ -11,7 +11,7 @@ import (
 func main() {
 	ebiten.SetWindowSize(game.ScreenWidth, game.ScreenHeight)
 	ebiten.SetWindowTitle("オレンジ")
-	if err := ebiten.RunGame(&game.Game{}); err != nil {
+	if err := ebiten.RunGame(&game.Game{Scene: game.TITILE}); err != nil {
 		panic(err)
 	}
 }
