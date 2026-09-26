@@ -3,6 +3,7 @@
 2人対戦アクションパズルゲーム。波の重ね合わせ原理をコアメカニクスとした Ebitengine (Go) 製ゲーム。
 
 詳細仕様: [docs/requirements.md](docs/requirements.md)
+オンライン対戦設計: [docs/online-design.md](docs/online-design.md)
 
 ---
 
