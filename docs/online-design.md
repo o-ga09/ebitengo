@@ -37,7 +37,7 @@
 - ランクマッチ・レーティング、フレンド、観戦、リプレイ
 - Open Match 等の本格マッチメイカー
 - 本格的な認証（ソーシャルログイン等）
-- モバイルネイティブビルド（WASM ブラウザ版とデスクトップ版を優先）
+- モバイルネイティブビルド（**ブラウザ（WASM）版を主要ターゲット**とし、デスクトップ版は開発用として併存）
 
 ---
 
@@ -53,6 +53,7 @@
 | D6 | 認証 | ゲストログイン（サーバ署名トークン） | 簡易で十分 |
 | D7 | DB | 既存クラスタの MySQL / Redis を利用 | 新規ミドルウェアを増やさない |
 | D8 | ドメイン | `*.o-ga09.com`（他アプリと同じ） | 既存 Tunnel 設定を流用 |
+| D9 | クライアント | **ブラウザ（Ebitengine の WASM ビルド）を主要ターゲット** | インストール不要で遊べる。ブラウザは UDP を使えないため D3（WebSocket）とも整合する |
 
 ### D3 の補足：TCP でアクションをやることのトレードオフ
 
@@ -124,7 +125,7 @@ TCP はパケットロス時に後続データが詰まる（Head-of-Line blocki
 
 ```mermaid
 flowchart LR
-  C[Ebiten Client<br/>Desktop / WASM]
+  C[Ebiten Client<br/>Browser WASM / Desktop]
   CF[Cloudflare Tunnel<br/>cloudflared]
   IN[ingress-nginx]
   API[wave-api<br/>Deployment]
@@ -138,6 +139,7 @@ flowchart LR
 
   C -- HTTPS --> CF --> IN
   C -- WSS --> CF
+  IN -- / --> WEB[wave-web<br/>静的配信]
   IN -- /v1/* --> API
   IN -- /match --> GW
   GW -- WS (PodIP:7654) --> GS1
@@ -155,7 +157,7 @@ flowchart LR
 |---|---|---|
 | `wave-duel.o-ga09.com` | `/v1/*` | wave-api |
 | `wave-duel.o-ga09.com` | `/match` | wave-gateway（WebSocket） |
-| `wave-duel.o-ga09.com` | `/` | WASM クライアント配信（Phase 6、wave-api で静的配信でも可） |
+| `wave-duel.o-ga09.com` | `/` | ブラウザ版クライアント（`index.html` / `game.wasm` / `wasm_exec.js`）の静的配信（P5） |
 | `wave-duel.home.local` | 同上 | LAN 内確認用 |
 
 ### 試合開始までのシーケンス
@@ -217,6 +219,14 @@ sequenceDiagram
 
 - エンコードは Protocol Buffers（`proto/wave/v1/*.proto`）。WebSocket のバイナリフレームで送る
 - Cloudflare の WebSocket アイドルタイムアウト（100 秒）対策として `Ping` を常時送る
+- WebSocket ライブラリは WASM でも動く `github.com/coder/websocket` を使う（ブラウザではブラウザ標準の WebSocket 経由で動作する）
+
+### ブラウザ固有の考慮点
+
+- **タブが非表示になると `requestAnimationFrame` が止まる。** 裏タブ中は入力を送らず `Ping` だけ維持する。復帰時は最新の `Snapshot` に合わせ直す（予測バッファは破棄）
+- **同一オリジン配信。** クライアント・API・ゲートウェイを同じホスト（`wave-duel.o-ga09.com`）に置き、CORS 設定を不要にする
+- **WASM のサイズ（現状約 13MB）。** 配信時に gzip / brotli 圧縮を有効にし、読み込み中表示を出す
+- **キー入力。** Space や矢印キーでページがスクロールしないようにする（Ebitengine がキャンバスで処理する）
 
 ### クライアント予測と補正（リコンシリエーション）
 
@@ -429,6 +439,7 @@ manifests/wave-duel/
 ├── ingress.yaml             # wave-duel.o-ga09.com, wave-duel.home.local
 ├── migration-job.yaml       # container name: migration
 ├── servicemonitor.yaml
+├── web-deployment.yaml      # ブラウザ版の静的配信（nginx + game.wasm。container name: wave-web）
 └── sealed-secret.yaml       # wave-duel-secret, gar-secret
 ```
 
@@ -452,7 +463,7 @@ manifests/wave-duel/
 
 他アプリと同じ流れにする。
 
-1. ebiten リポジトリの GitHub Actions でイメージ 3 種（`wave-api` / `wave-gateway` / `wave-gameserver`）を GAR に push する
+1. ebiten リポジトリの GitHub Actions でイメージ 4 種（`wave-api` / `wave-gateway` / `wave-gameserver` / `wave-web`）を GAR に push する
 2. infra リポジトリの該当マニフェストの `image` を、コンテナ名をキーに `yq` で書き換えて commit する
    - Fleet は `.spec.template.spec.template.spec.containers[]` が対象になる点に注意
 
@@ -469,7 +480,7 @@ manifests/wave-duel/
 
 ```
 cmd/
-├── client/main.go        # 現 cmd/main.go を移設（Ebiten クライアント。ローカル / オンライン両対応）
+├── client/main.go        # 現 cmd/main.go を移設（Ebiten クライアント。ブラウザ / デスクトップ、ローカル / オンライン両対応）
 ├── gameserver/main.go
 ├── gateway/main.go
 └── api/main.go
@@ -481,6 +492,7 @@ internal/
 ├── gateway/
 └── api/
 proto/wave/v1/            # メッセージ定義
+web/                      # ブラウザ版の index.html（game.wasm / wasm_exec.js はビルド生成物）
 deploy/local/             # kind/k3d + Agones のローカル検証用（任意）
 Dockerfile.*              # 各バイナリ用（distroless / multi-arch）
 ```
@@ -491,14 +503,17 @@ CLAUDE.md のファイル責務表と「`internal/` 直下は `package game`」�
 
 ## 11. 開発フェーズ
 
+進捗は [README.md のロードマップ](../README.md#ロードマップ) で ✅ を付けて管理する。
+
 | Phase | 内容 | 完了条件 |
 |---|---|---|
-| **P1** | `internal/sim` の切り出しとリアルタイムルール v0 をローカルで実装 | 1 台で 2P のリアルタイム対戦が遊べる。sim のユニットテストが通る |
-| **P2** | proto 定義、`cmd/gameserver`（`-local`）、クライアントのオンラインモード（予測・補間） | localhost / LAN で 2 クライアントが直結対戦できる。遅延を注入しても破綻しない |
+| **P0** | 設計、ブラウザ（WASM）起動 | ✅ 完了 |
+| **P1** | `internal/sim` の切り出しとリアルタイムルール v0 をローカルで実装 | **ブラウザで** 2P のリアルタイム対戦が遊べる。sim のユニットテストが通る |
+| **P2** | proto 定義、`cmd/gameserver`（`-local`）、クライアントのオンラインモード（予測・補間） | localhost / LAN で 2 つのブラウザが対戦できる。遅延を注入しても破綻しない |
 | **P3** | infra に Agones 導入と Fleet 作成、SDK 組み込み、`cmd/gateway` | 手動 Allocation → ゲートウェイ経由で対戦 → 終了後に Shutdown される |
 | **P4** | `cmd/api`：ゲスト認証、簡易マッチング、Allocation、結果保存 | 2 クライアントがキューに入るだけで試合が始まり、結果が MySQL に残る |
-| **P5** | CI/CD（GAR・infra 自動更新）、Tunnel 公開、監視ダッシュボード | `wave-duel.o-ga09.com` 経由で外部から対戦できる |
-| **P6** | WASM クライアント配信、共鳴・環境波などゲーム要素の追加 | ブラウザで遊べる |
+| **P5** | CI/CD（GAR・infra 自動更新）、ブラウザ版の配信、Tunnel 公開、監視ダッシュボード | `wave-duel.o-ga09.com` をブラウザで開くだけで外部の人と対戦できる |
+| **P6** | 共鳴・環境波などゲーム要素の追加、モバイルブラウザのタッチ操作 | 戦略的な深みが出る |
 
 ---
 

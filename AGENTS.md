@@ -10,9 +10,19 @@
 ## クイックスタート
 
 ```bash
-go mod tidy          # 依存関係インストール
-go run ./cmd/main.go # ゲーム起動
+go mod tidy   # 依存関係インストール
+make serve    # ブラウザ版（WASM）をビルドして http://localhost:8080 で配信
+make run      # デスクトップ版を起動
+make test     # テスト
 ```
+
+---
+
+## 開発ルール
+
+- **main への直接 push を許可する。** このリポジトリではブランチ・PR を作らず、main にコミットして push してよい（`o-ga09/infra` は push が即本番反映のため対象外。push 前に必ず確認する）
+- **ロードマップは README.md で管理する。** 項目を完了したら、同じ変更（コミット）の中で README.md の該当項目を `⬜` → `✅` に更新する。新しい作業が発生したら該当フェーズに項目を追加する
+- **ブラウザ（WASM）を主要ターゲットとする。** 変更後は `GOOS=js GOARCH=wasm go build ./cmd` が通ることを確認する。WASM で使えない API（`os/exec`、ファイル I/O、生の TCP/UDP ソケットなど）をクライアントのコードで使わない
 
 ---
 
